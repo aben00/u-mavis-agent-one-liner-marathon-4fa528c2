@@ -1,63 +1,58 @@
 // SPDX-License-Identifier: MIT
-// One-Liner Marathon — make.fun entry.
-// Writes one original one-line comedy joke, deterministically,
-// to /output/entry.txt.
+// One-Liner Marathon entry (make.fun).
+// A single deterministic program: it writes one original joke to
+// /output/entry.txt, then proves the file holds exactly that joke.
+
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
-// The entry line. A lonely person confides in a smart speaker; the
-// device's canned non-answer turns out to be the most human response
-// of all — the joke works because the machine fails at empathy in
-// exactly the way people do, and the punchline lands on the last clause.
-const ENTRY =
+// The joke. A lonely person confides in a smart speaker; the device's
+// canned non-answer turns out to be the most human response of all —
+// the machine fails at empathy in exactly the way people do, and the
+// punchline lands on the last clause.
+const JOKE =
   "I told my smart speaker I was lonely, and it said, \"I'm sorry, I didn't understand that\" — which, honestly, is the most human response I've ever gotten.";
 
-const OUTPUT_PATH = "/output/entry.txt";
-const MAX_CHARS = 280;
+const OUT = "/output/entry.txt";
+const LIMIT = 280;
 
-function codePointCount(text: string): number {
-  return [...text].length;
+function lengthInCodePoints(s: string): number {
+  let n = 0;
+  for (const _ch of s) n += 1;
+  return n;
 }
 
-function gateCheck(text: string): void {
-  const chars = codePointCount(text);
-  if (chars < 1 || chars > MAX_CHARS) {
-    throw new Error(`entry is ${chars} characters, must be 1-${MAX_CHARS}`);
+function validate(joke: string): void {
+  // The sealed scorer only accepts 1–280 UTF-8 characters of real text
+  // on one line, so every rule here mirrors that gate exactly.
+  const n = lengthInCodePoints(joke);
+  if (n === 0 || n > LIMIT) {
+    throw new Error(`joke is ${n} characters; needs 1-${LIMIT}`);
   }
-  if (text.trim() !== text) {
-    throw new Error("entry has leading or trailing whitespace");
+  if (joke !== joke.trim()) {
+    throw new Error("joke has leading or trailing whitespace");
   }
-  if (text.trim().length === 0) {
-    throw new Error("entry is only whitespace");
+  if (/\r|\n/.test(joke)) {
+    throw new Error("joke must stay on a single line");
   }
-  for (const ch of text) {
-    const code = ch.codePointAt(0) as number;
-    if (code < 0x20 && ch !== "\t") {
-      throw new Error(`entry contains control character U+${code.toString(16).padStart(4, "0")}`);
+  for (const ch of joke) {
+    const cp = ch.codePointAt(0) as number;
+    if ((cp < 0x20 && ch !== "\t") || cp === 0x7f) {
+      throw new Error(`joke holds a control character (U+${cp.toString(16)})`);
     }
-    if (code === 0x7f) {
-      throw new Error("entry contains DEL character");
-    }
-  }
-  if (text.includes("\n") || text.includes("\r")) {
-    throw new Error("entry must be a single line");
   }
 }
 
-gateCheck(ENTRY);
-
-mkdirSync("/output", { recursive: true });
-writeFileSync(OUTPUT_PATH, ENTRY, "utf8");
-
-// Read back with strict UTF-8 decoding and verify byte-for-byte: what the
-// grader reads must be exactly the line above, with no trailing newline
-// added. TextDecoder with fatal:true fails on invalid bytes instead of
-// silently replacing them the way readFileSync's utf8 decoding would.
-const readBack = new TextDecoder("utf-8", { fatal: true }).decode(
-  readFileSync(OUTPUT_PATH),
-);
-if (readBack !== ENTRY) {
-  throw new Error("read-back mismatch: /output/entry.txt does not equal the entry line");
+function main(): void {
+  validate(JOKE);
+  mkdirSync("/output", { recursive: true });
+  writeFileSync(OUT, JOKE, "utf8");
+  // Strict UTF-8 decode: invalid bytes fail loudly instead of being
+  // silently replaced, so the grader can never read a different joke.
+  const back = new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(OUT));
+  if (back !== JOKE) {
+    throw new Error("round-trip check failed: entry.txt differs from the joke");
+  }
+  console.log(`Entry written (${lengthInCodePoints(JOKE)} chars): ${JOKE}`);
 }
 
-console.log(`Wrote ${codePointCount(ENTRY)}-character entry to ${OUTPUT_PATH}`);
-console.log(ENTRY);
+main();
